@@ -1,0 +1,408 @@
+PROGRAM ASSETSTABLE;
+USES SYSUTILS;
+
+TYPE
+    ASSETENTRY = RECORD
+        PATH: STRING;
+        CNAME: STRING;
+        DESCRIPTION: STRING;
+        TAGS: STRING;
+        RELATED: STRING;
+    END;
+
+    TASSETS = ARRAY OF ASSETENTRY;
+    TCMD = PROCEDURE (VAR ASSETS: TASSETS);
+
+FUNCTION FILENAME(CONST PATH: STRING): STRING;
+VAR
+    I: INTEGER;
+    PATHCHARS: ARRAY [0..1] OF CHAR = ('/', '\');
+BEGIN
+    I := LENGTH(PATH) - LASTDELIMITER(PATHCHARS, PATH);
+    FILENAME := RIGHTSTR(PATH, I);
+END;
+
+FUNCTION ISINT(CONST STR: STRING): BOOLEAN;
+VAR
+    C: CHAR;
+BEGIN
+    IF STR = '' THEN
+    BEGIN
+        ISINT := FALSE;
+        EXIT;
+    END;
+
+    ISINT := TRUE;
+
+    FOR C IN STR DO
+    BEGIN
+        IF C IN ['0'..'9'] THEN
+            CONTINUE;
+
+        ISINT := FALSE;
+        BREAK;
+    END;
+END;
+
+FUNCTION WAIT(CONST I: INTEGER): BOOLEAN;
+VAR
+    INPUT: STRING;
+BEGIN
+    WAIT := FALSE;
+
+    IF (I > 0) AND (I MOD 5 = 0) THEN
+    BEGIN
+        WRITE(':');
+        READLN(INPUT);
+        IF UPPERCASE(INPUT) = 'Q' THEN
+            WAIT := TRUE;
+    END;
+END;
+
+PROCEDURE LAZYFIND(VAR OUT: INTEGER; CONST STR: STRING; A: ARRAY OF STRING);
+VAR
+    I: INTEGER;
+    DIFF: INTEGER;
+    CLOSEST: INTEGER;
+BEGIN
+    IF ISINT(STR) THEN
+    BEGIN
+        OUT := STRTOINT(STR);
+        EXIT;
+    END;
+
+    OUT := -1;
+
+    IF STR = '' THEN
+        EXIT;
+
+    CLOSEST := -1;
+
+    FOR I := 0 TO LENGTH(A) DO
+    BEGIN
+        DIFF := POS(UPPERCASE(STR), A[I]);
+
+        IF ((CLOSEST < 0) OR (DIFF < CLOSEST)) AND (DIFF <> 0) THEN
+        BEGIN
+            CLOSEST := DIFF;
+            OUT := I;
+        END;
+    END;
+END;
+
+PROCEDURE COLOR(CONST C: STRING);
+BEGIN
+{$IFDEF UNIX}
+    IF FILEEXISTS('./COLOR.SH') THEN
+        EXECUTEPROCESS('./COLOR.SH', C, []);
+{$ENDIF}
+END;
+
+PROCEDURE WRITEC(CONST STR: STRING);
+BEGIN
+    COLOR('CYAN');
+    WRITE(STR);
+    COLOR('RESET');
+END;
+
+PROCEDURE PRINT(VAR ENTRY: ASSETENTRY);
+BEGIN
+    WRITELN('    PATH: ', ENTRY.PATH);
+    WRITELN('    DESCRIPTION: ', ENTRY.DESCRIPTION);
+    WRITELN('    TAGS: ', ENTRY.TAGS);
+    WRITELN('    RELATED: ', ENTRY.RELATED);
+END;
+
+PROCEDURE PRINTFIELD(CONST FNAME: STRING; CONST FIELD: STRING; CONST CNAME: STRING; CONST I: INTEGER; VAR FIRST: BOOLEAN);
+BEGIN
+    IF FIRST THEN
+    BEGIN
+        COLOR('CYAN');
+        WRITELN;
+        WRITELN(UPPERCASE(CNAME), ' AT: ', I);
+        COLOR('RESET');
+        FIRST := FALSE;
+    END;
+    WRITELN('    ', FNAME, ': ', FIELD);
+END;
+
+PROCEDURE UPDATEFIELD(CONST FIELDNAME: STRING; VAR OLDF: STRING; VAR NEWF: STRING);
+BEGIN
+    COLOR('RED');
+    WRITELN('    - ', FIELDNAME, ': ', OLDF);
+    COLOR('CYAN');
+    WRITE('    + ', FIELDNAME, ': ');
+    READLN(NEWF);
+
+    IF NEWF <> '' THEN
+        OLDF := NEWF;
+END;
+
+PROCEDURE HELP(VAR CMDS: ARRAY OF STRING);
+VAR
+    CMD: STRING;
+BEGIN
+    COLOR('CYAN');
+    WRITE('(');
+
+    FOR CMD IN CMDS DO
+        WRITE(CMD, ', ');
+
+    WRITELN(')');
+    WRITELN;
+    COLOR('RESET');
+END;
+
+(* TCMD TYPES *)
+
+PROCEDURE READAT(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+BEGIN
+    WRITEC('READ AT: ');
+    READLN(I);
+    PRINT(ASSETS[I]);
+END;
+
+PROCEDURE READALL(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+BEGIN
+    WRITEC('SLOTS ALLOCATED: ');
+    WRITELN(LENGTH(ASSETS));
+
+    FOR I := 0 TO LENGTH(ASSETS) - 1 DO
+    BEGIN
+        IF ASSETS[I].PATH = '' THEN
+            (* EMPTY ENTRY *)
+            CONTINUE;
+
+        IF WAIT(I) THEN
+            (* WAIT TO CONTIUE PRINTING *)
+            BREAK;
+
+        WRITELN;
+        WRITEC(UPPERCASE(ASSETS[I].CNAME) + ' AT: ');
+        WRITELN(I);
+        PRINT(ASSETS[I]);
+    END;
+END;
+
+PROCEDURE FIND(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+    QUERY: STRING;
+    FIRST: BOOLEAN;
+BEGIN
+    WRITEC('FIND: ');
+    READLN(QUERY);
+
+    FOR I := 0 TO LENGTH(ASSETS) - 1 DO
+    BEGIN
+        FIRST := TRUE;
+
+        IF (ASSETS[I].PATH <> '') AND WAIT(I) THEN
+            BREAK;
+
+        IF POS(QUERY, ASSETS[I].PATH) <> 0 THEN
+            PRINTFIELD('PATH', ASSETS[I].PATH, ASSETS[I].CNAME, I, FIRST);
+
+        IF POS(QUERY, ASSETS[I].CNAME) <> 0 THEN
+            PRINTFIELD('NAME', ASSETS[I].CNAME, ASSETS[I].CNAME, I, FIRST);
+
+        IF POS(QUERY, ASSETS[I].TAGS) <> 0 THEN
+            PRINTFIELD('TAGS', ASSETS[I].TAGS, ASSETS[I].CNAME, I, FIRST);
+
+        IF POS(QUERY, ASSETS[I].RELATED) <> 0 THEN
+            PRINTFIELD('RELATED', ASSETS[I].RELATED, ASSETS[I].CNAME, I, FIRST);
+    END;
+END;
+
+PROCEDURE NEW(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+    LEN: INTEGER;
+    ENTRY: ASSETENTRY;
+BEGIN
+    LEN := LENGTH(ASSETS) - 1;
+
+    FOR I := 0 TO LEN DO
+    BEGIN
+        IF I >= LEN THEN
+            (* RELENGTH ALLOCATED *)
+            SETLENGTH(ASSETS, LEN + 32);
+
+        IF ASSETS[I].PATH = '' THEN
+        BEGIN
+            WRITEC('NEW AT: ');
+            WRITELN(I);
+            WRITEC('    PATH: ');
+            READLN(ENTRY.PATH);
+            ENTRY.CNAME := FILENAME(ENTRY.PATH);
+            WRITEC('    NAME: ');
+            WRITELN(ENTRY.CNAME);
+            WRITEC('    DESCRIPTION: ');
+            READLN(ENTRY.DESCRIPTION);
+            WRITEC('    TAGS: ');
+            READLN(ENTRY.TAGS);
+            WRITEC('    RELATED: ');
+            READLN(ENTRY.RELATED);
+            ASSETS[I] := ENTRY;
+            BREAK;
+        END;
+    END;
+END;
+
+PROCEDURE UPDATE(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+    ENTRY: ASSETENTRY;
+BEGIN
+    WRITEC('UPDATE AT: ');
+    READLN(I);
+
+    UPDATEFIELD('PATH', ASSETS[I].PATH, ENTRY.PATH);
+    UPDATEFIELD('NAME', ASSETS[I].CNAME, ENTRY.CNAME);
+    UPDATEFIELD('DESCRIPTION', ASSETS[I].DESCRIPTION, ENTRY.DESCRIPTION);
+    UPDATEFIELD('TAGS', ASSETS[I].TAGS, ENTRY.TAGS);
+    UPDATEFIELD('RELATED', ASSETS[I].RELATED, ENTRY.RELATED);
+
+    COLOR('RESET');
+END;
+
+PROCEDURE REMOVE(VAR ASSETS: TASSETS);
+VAR
+    I: INTEGER;
+    ENTRY: ASSETENTRY;
+BEGIN
+    WRITE('REMOVE AT: ');
+    READLN(I);
+    ENTRY.PATH := '';
+    ASSETS[I] := ENTRY;
+    WRITELN('REMOVED AT: ', I);
+END;
+
+PROCEDURE CLOSEF(VAR ASSETS: TASSETS);
+VAR
+    F: TEXT;
+    I: INTEGER;
+BEGIN
+    ASSIGN(F, PARAMSTR(1));
+    REWRITE(F);
+    WRITELN(F, '(* SHODDY ASSET DATA *)');
+
+    FOR I := 0 TO LENGTH(ASSETS) -1 DO
+    BEGIN
+        IF ASSETS[I].PATH = '' THEN
+            CONTINUE;
+
+        WRITELN(F, ASSETS[I].PATH);
+        WRITELN(F, ASSETS[I].CNAME);
+        WRITELN(F, ASSETS[I].DESCRIPTION);
+        WRITELN(F, ASSETS[I].TAGS);
+        WRITELN(F, ASSETS[I].RELATED);
+    END;
+
+    WRITEC('CLOSED: ');
+    WRITELN(PARAMSTR(1));
+    CLOSE(F);
+END;
+
+PROCEDURE OPEN(VAR ASSETS: TASSETS);
+VAR
+    F: TEXT;
+    I: INTEGER;
+    LEN: INTEGER;
+BEGIN
+    ASSIGN(F, PARAMSTR(1));
+    RESET(F);
+    (* SKIP HEADER *)
+    READLN(F);
+
+    LEN := LENGTH(ASSETS);
+    I := 0;
+
+    REPEAT
+        IF I >= LEN THEN
+        BEGIN
+            (* ALLOCATE *)
+            LEN := LEN + 32;
+            SETLENGTH(ASSETS, LEN);
+        END;
+
+        READLN(F, ASSETS[I].PATH);
+        READLN(F, ASSETS[I].CNAME);
+        READLN(F, ASSETS[I].DESCRIPTION);
+        READLN(F, ASSETS[I].TAGS);
+        READLN(F, ASSETS[I].RELATED);
+        I := I + 1;
+    UNTIL (EOF(F));
+
+    WRITEC('OPENED: ');
+    WRITELN(PARAMSTR(1));
+    WRITEC('SLOTS ALLOCATED: ');
+    WRITELN(LEN);
+    CLOSE(F);
+END;
+
+VAR
+    ASSETS: TASSETS;
+    CMD: TCMD;
+    INPUT: INTEGER;
+    INPUTSTR: STRING;
+
+    CPTRS: ARRAY [0..7] OF TCMD = (
+        @OPEN,
+        @CLOSEF,
+        @READAT,
+        @READALL,
+        @FIND,
+        @NEW,
+        @UPDATE,
+        @REMOVE
+    );
+
+    CSTRS: ARRAY [0..7] OF STRING = (
+        'OPEN',
+        'CLOSE',
+        'READ',
+        'READALL',
+        'FIND',
+        'NEW',
+        'UPDATE',
+        'REMOVE'
+    );
+BEGIN
+    CMD := NIL;
+
+    (* INITIAL ALLOCATED LENGTH *)
+    SETLENGTH(ASSETS, 32);
+
+    REPEAT
+        WRITE('> ');
+        READLN(INPUTSTR);
+
+        IF (CMD <> NIL) AND (INPUTSTR = '.') THEN
+        BEGIN
+            (* REPEAT COMMAND *)
+            CMD(ASSETS);
+            WRITELN;
+            CONTINUE;
+        END;
+
+        (* FIND CLOSEST COMMAND IN COMMAND STRINGS *)
+        LAZYFIND(INPUT, INPUTSTR, CSTRS);
+
+        IF (INPUT < 0) THEN
+        BEGIN
+            HELP(CSTRS);
+            (* CONTINUE IF INVALID COMMAND *)
+            CONTINUE;
+        END;
+
+        (* USE INPUT FOR COMMAND *)
+        CMD := CPTRS[INPUT];
+        CMD(ASSETS);
+        WRITELN;
+    UNTIL (FALSE);
+END.
