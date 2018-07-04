@@ -289,13 +289,15 @@ VAR
 BEGIN
     ASSIGN(F, PARAMSTR(1));
     REWRITE(F);
-    WRITELN(F, '(* SHODDY ASSET DATA *)');
 
     FOR I := 0 TO LENGTH(ASSETS) -1 DO
     BEGIN
         IF ASSETS[I].PATH = '' THEN
             CONTINUE;
 
+        (* WRITE META LINE *)
+        WRITE(F, '(* ', ASSETS[I].CNAME, ' AT: ', I, ' *)');
+        (* WRITE ASSET DATA *)
         WRITELN(F, ASSETS[I].PATH);
         WRITELN(F, ASSETS[I].CNAME);
         WRITELN(F, ASSETS[I].DESCRIPTION);
@@ -303,6 +305,7 @@ BEGIN
         WRITELN(F, ASSETS[I].RELATED);
     END;
 
+    WRITELN('(* END OFF ASSET DATA *)');
     WRITEC('CLOSED: ');
     WRITELN(PARAMSTR(1));
     CLOSE(F);
@@ -316,8 +319,6 @@ VAR
 BEGIN
     ASSIGN(F, PARAMSTR(1));
     RESET(F);
-    (* SKIP HEADER *)
-    READLN(F);
 
     LEN := LENGTH(ASSETS);
     I := 0;
@@ -330,6 +331,9 @@ BEGIN
             SETLENGTH(ASSETS, LEN);
         END;
 
+        (* SKIP METADATA LINE *)
+        READLN(F);
+        (* READ DATA *)
         READLN(F, ASSETS[I].PATH);
         READLN(F, ASSETS[I].CNAME);
         READLN(F, ASSETS[I].DESCRIPTION);
