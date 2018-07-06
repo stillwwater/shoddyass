@@ -91,6 +91,27 @@ BEGIN
     END;
 END;
 
+PROCEDURE READML(VAR FIELD: STRING);
+VAR
+    LN: STRING;
+BEGIN
+    FIELD := '';
+
+    REPEAT
+        WRITE('    ~ ');
+        READLN(LN);
+
+        IF LN = '\' THEN
+            BREAK;
+
+        IF FIELD <> '' THEN
+            (* ADD SPACE INSTEAD OF LINE BREAK *)
+            LN := ' ' + LN;
+
+        FIELD := FIELD + LN;
+    UNTIL FALSE;
+END;
+
 PROCEDURE COLOR(CONST C: STRING);
 BEGIN
 {$IFDEF UNIX}
@@ -253,6 +274,10 @@ BEGIN
             WRITEC('    DESCRIPTION: ');
             READLN(ENTRY.DESCRIPTION);
 
+            IF ENTRY.DESCRIPTION = '\' THEN
+                (* HANDLE MULTILINE DESCRIPTION *)
+                READML(ENTRY.DESCRIPTION);
+
             WRITEC('    TAGS: ');
             READLN(ENTRY.TAGS);
 
@@ -354,7 +379,7 @@ BEGIN
         READLN(F, ASSETS[I].TAGS);
         READLN(F, ASSETS[I].RELATED);
         I := I + 1;
-    UNTIL (EOF(F));
+    UNTIL EOF(F);
 
     WRITEC('OPENED: ');
     WRITELN(PARAMSTR(1));
@@ -422,5 +447,5 @@ BEGIN
         CMD := CPTRS[INPUT];
         CMD(ASSETS);
         WRITELN;
-    UNTIL (FALSE);
+    UNTIL FALSE;
 END.
